@@ -371,69 +371,115 @@ function renderSummary() {
 function optimize() {
   const players = Number(state.players), cap = 100;
   const items = activeItems().filter(x => currentWeight(x.type) > 0);
-  if (!items.length) { el('optimizerResult').className = 'optimizer-result muted'; el('optimizerResult').textContent = 'バッグ対象を入力してください。'; return; }
-
-  const required = items.filter(x => !x.def.isMain && x.bonus);
-  const optional = items.filter(x => x.def.isMain || !x.bonus);
-  const bins = Array(players).fill(0);
-  const assignments = Array.from({length: players}, () => []);
-
-  function placeRequired(i) {
-    if (i >= required.length) return true;
-    const item = required[i], w = currentWeight(item.type);
-    for (let p=0; p<players; p++) {
-      if (bins[p] + w <= cap) {
-        bins[p] += w; assignments[p].push(item);
-        if (placeRequired(i+1)) return true;
-        assignments[p].pop(); bins[p] -= w;
-      }
-      if (bins[p] === 0) break;
-    }
-    return false;
+  if (!items.length) {
+    el('optimizerResult').className = 'optimizer-result muted';
+    el('optimizerResult').textContent = 'バッグ対象を入力してください。';
+    return;
   }
-  if (!placeRequired(0)) {
+
+  const ordered = items
+    .map(item => ({ ...item, required: !item.def.isMain && item.bonus }))
+    .sort((a, b) => {
+      if (a.required !== b.required) return a.required ? -1 : 1;
+      return (optimizationValue(b) / currentWeight(b.type)) -
+             (optimizationValue(a) / currentWeight(a.type));
+    });
+
+  // 同じ容量のバッグは区別しない。容量配列を常に昇順にそろえてメモ化することで、
+  // 4人時に爆発していた「各アイテムを各プレイヤーへ置く全探索」を大幅に削減する。
+  const memo = new Map();
+  const choices = new Map();
+  const impossible = Number.NEGATIVE_INFINITY;
+
+  function keyOf(i, loads) {
+    return `${i}|${loads.join(',')}`;
+  }
+
+  function solve(i, loads) {
+    if (i >= ordered.length) return 0;
+    const key = keyOf(i, loads);
+    if (memo.has(key)) return memo.get(key);
+
+    const item = ordered[i];
+    const weight = currentWeight(item.type);
+    const value = optimizationValue(item);
+    let best = impossible;
+    let bestChoice = null;
+
+    // 任意対象だけは回収しない選択を許可する。
+    if (!item.required) {
+      best = solve(i + 1, loads);
+      bestChoice = { take: false };
+    }
+
+    // 容量が同じバッグへの配置は結果が同一なので1回だけ試す。
+    const seenLoads = new Set();
+    for (let p = 0; p < loads.length; p++) {
+      if (seenLoads.has(loads[p])) continue;
+      seenLoads.add(loads[p]);
+      if (loads[p] + weight > cap) continue;
+
+      const nextLoads = loads.slice();
+      nextLoads[p] += weight;
+      nextLoads.sort((a, b) => a - b);
+      const tail = solve(i + 1, nextLoads);
+      if (tail === impossible) continue;
+
+      const candidate = value + tail;
+      if (candidate > best) {
+        best = candidate;
+        bestChoice = { take: true, loadIndex: p };
+      }
+    }
+
+    memo.set(key, best);
+    choices.set(key, bestChoice);
+    return best;
+  }
+
+  const initialLoads = Array(players).fill(0);
+  const bestValue = solve(0, initialLoads);
+  if (bestValue === impossible) {
     el('optimizerResult').className = 'optimizer-result';
     el('optimizerResult').innerHTML = '<span class="warning">ボーナス対象を全員のバッグに収められません。</span><br>人数か対象設定を確認してください。';
     return;
   }
 
-  let bestValue = required.reduce((s,x)=>s+optimizationValue(x),0);
-  let bestBins = bins.slice();
-  let bestAssign = assignments.map(a=>a.slice());
-  optional.sort((a,b) => (optimizationValue(b)/currentWeight(b.type)) - (optimizationValue(a)/currentWeight(a.type)));
-
-  function dfs(i, value) {
-    if (i >= optional.length) {
-      if (value > bestValue) { bestValue = value; bestBins = bins.slice(); bestAssign = assignments.map(a=>a.slice()); }
-      return;
+  // メモ化探索の選択を実際のプレイヤー別リストへ復元する。
+  const playerBins = Array.from({ length: players }, (_, id) => ({ id, load: 0, items: [] }));
+  let loads = initialLoads.slice();
+  for (let i = 0; i < ordered.length; i++) {
+    const choice = choices.get(keyOf(i, loads));
+    if (!choice) break;
+    if (choice.take) {
+      playerBins.sort((a, b) => a.load - b.load || a.id - b.id);
+      const bin = playerBins[choice.loadIndex];
+      const item = ordered[i];
+      bin.load += currentWeight(item.type);
+      bin.items.push(item);
+      loads = playerBins.map(x => x.load).sort((a, b) => a - b);
     }
-    const optimistic = value + optional.slice(i).reduce((s,x)=>s+optimizationValue(x),0);
-    if (optimistic <= bestValue) return;
-    const item = optional[i], w = currentWeight(item.type);
-    const seenLoads = new Set();
-    for (let p=0; p<players; p++) {
-      if (bins[p] + w <= cap && !seenLoads.has(bins[p])) {
-        seenLoads.add(bins[p]); bins[p] += w; assignments[p].push(item);
-        dfs(i+1, value + optimizationValue(item));
-        assignments[p].pop(); bins[p] -= w;
-      }
-    }
-    dfs(i+1, value);
   }
-  dfs(0, bestValue);
+  playerBins.sort((a, b) => a.id - b.id);
 
+  const bestBins = playerBins.map(x => x.load);
+  const bestAssign = playerBins.map(x => x.items);
   const plans = bestAssign.map((list, i) => {
     const used = bestBins[i];
-    const text = list.length ? list.map(x => `${x.bonus ? '★' : ''}${x.def.floor} ${TYPE_INFO[x.type].label} ${Number(x.value) > 0 ? money(x.value) : '（金額未入力）'}`).join('<br>') : '回収なし';
-    return `<div class="player-plan"><b>プレイヤー${i+1}：${used}% / 100%</b>${text}</div>`;
+    const text = list.length
+      ? list.map(x => `${x.bonus ? '★' : ''}${x.def.floor} ${TYPE_INFO[x.type].label} ${Number(x.value) > 0 ? money(x.value) : '（金額未入力）'}`).join('<br>')
+      : '回収なし';
+    return `<div class="player-plan"><b>プレイヤー${i + 1}：${used}% / 100%</b>${text}</div>`;
   }).join('');
+
   el('optimizerResult').className = 'optimizer-result';
-  const hasUnknownValues = bestAssign.flat().some(x => Number(x.value) <= 0);
-  const knownTotal = bestAssign.flat().reduce((sum, x) => sum + (Number(x.value) > 0 ? Number(x.value) : 0), 0);
+  const selectedItems = bestAssign.flat();
+  const hasUnknownValues = selectedItems.some(x => Number(x.value) <= 0);
+  const knownTotal = selectedItems.reduce((sum, x) => sum + (Number(x.value) > 0 ? Number(x.value) : 0), 0);
   const heading = hasUnknownValues
-    ? `<strong>推奨回収：${bestAssign.flat().length}個</strong><br><span class="muted-note">金額未入力を含むため、同価値として容量効率を優先しています。入力済み金額の合計：${money(knownTotal)}</span>`
+    ? `<strong>推奨回収：${selectedItems.length}個</strong><br><span class="muted-note">金額未入力を含むため、同価値として容量効率を優先しています。入力済み金額の合計：${money(knownTotal)}</span>`
     : `<strong>推奨回収額：${money(knownTotal)}</strong>`;
-  el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a,b)=>a+b,0)}% / ${players*100}%${plans}`;
+  el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a, b) => a + b, 0)}% / ${players * 100}%${plans}`;
 }
 
 function renderAll() { renderTabs(); renderMap(); renderEditor(); renderSummary(); }
