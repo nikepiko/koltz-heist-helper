@@ -48,6 +48,8 @@ const TYPE_INFO = {
 
 const STORAGE_KEY = 'koltz-helper-v1';
 let state = { version: 1, currentFloor: '1F', selectedSpot: null, players: 2, spots: {} };
+let latestOptimization = null;
+let highlightedPlayer = null;
 
 const el = id => document.getElementById(id);
 const money = n => new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(Number(n) || 0);
@@ -255,6 +257,54 @@ function decodePayload(str) {
   return decodeCompactPayload(bytes);
 }
 
+function optimizationSignature() {
+  return JSON.stringify({
+    players: Number(state.players),
+    items: activeItems().map(item => [item.def.id, item.exists, item.bonus, Number(item.value) || 0])
+  });
+}
+
+function activePlayerAssignment() {
+  if (highlightedPlayer === null || !latestOptimization) return null;
+  if (latestOptimization.signature !== optimizationSignature()) return null;
+  return latestOptimization.assignments[highlightedPlayer] || null;
+}
+
+function setHighlightedPlayer(playerIndex, jumpToFirstFloor = true) {
+  highlightedPlayer = playerIndex;
+  const assignment = activePlayerAssignment();
+  if (jumpToFirstFloor && assignment && assignment.length) {
+    state.currentFloor = assignment[0].def.floor;
+    state.selectedSpot = null;
+    persist();
+  }
+  renderAll();
+  renderPlayerSelector();
+}
+
+function renderPlayerSelector() {
+  const host = el('playerHighlightControls');
+  if (!host) return;
+  if (!latestOptimization || latestOptimization.signature !== optimizationSignature()) {
+    host.classList.add('hidden');
+    host.innerHTML = '';
+    highlightedPlayer = null;
+    return;
+  }
+  host.classList.remove('hidden');
+  const buttons = [
+    `<button type="button" class="player-filter ${highlightedPlayer === null ? 'active' : ''}" data-player="all">全員</button>`,
+    ...latestOptimization.assignments.map((_, i) => `<button type="button" class="player-filter ${highlightedPlayer === i ? 'active' : ''}" data-player="${i}">P${i + 1}</button>`)
+  ];
+  host.innerHTML = `<span>地図表示</span>${buttons.join('')}`;
+  host.querySelectorAll('[data-player]').forEach(button => {
+    button.addEventListener('click', () => {
+      const value = button.dataset.player;
+      setHighlightedPlayer(value === 'all' ? null : Number(value));
+    });
+  });
+}
+
 function renderTabs() {
   el('floorTabs').innerHTML = Object.keys(FLOORS).map(f => `<button class="tab ${f === state.currentFloor ? 'active' : ''}" data-floor="${f}">${f}</button>`).join('');
   el('floorTabs').querySelectorAll('button').forEach(btn => btn.addEventListener('click', () => {
@@ -266,6 +316,8 @@ function renderMap() {
   const cfg = FLOORS[state.currentFloor];
   el('mapImage').src = cfg.image;
   el('mapImage').alt = `${state.currentFloor} マップ`;
+  const playerAssignment = activePlayerAssignment();
+  const highlightedIds = new Set((playerAssignment || []).map(item => item.def.id));
   el('markers').innerHTML = cfg.spots.map((raw, idx) => {
     const def = SPOT_DEFS[raw[0]], data = getSpot(def.id);
     const filled = data.exists;
@@ -274,15 +326,18 @@ function renderMap() {
       'marker', `type-${filled ? def.type : 'none'}`, 
       !filled ? 'empty' : '', filled ? 'filled' : '', isBonus ? 'bonus' : '',
       def.isMain ? 'main' : '', state.selectedSpot === def.id ? 'selected' : '',
+      playerAssignment && highlightedIds.has(def.id) ? 'player-highlight' : '',
+      playerAssignment && !highlightedIds.has(def.id) ? 'player-dimmed' : '',
       def.y >= 84 ? 'near-bottom' : '', def.x <= 10 ? 'near-left' : '', def.x >= 90 ? 'near-right' : ''
     ].filter(Boolean).join(' ');
     const visibleType = filled ? def.type : 'none';
     const symbol = `<span class="marker-icon"><img src="${iconFor(visibleType)}" alt="" draggable="false"></span>`;
+    const playerBadge = playerAssignment && highlightedIds.has(def.id) ? `<span class="player-marker-badge">P${highlightedPlayer + 1}</span>` : '';
     const label = `${def.name}${filled ? `・${TYPE_INFO[def.type].label}` : ''}${Number(data.value) > 0 ? `・${money(data.value)}` : ''}`;
     const amount = Number(data.value) > 0
       ? `<span class="marker-amount">${money(data.value)}</span>`
       : '';
-    return `<button class="${classes}" style="left:${def.x}%;top:${def.y}%" data-id="${def.id}" aria-label="${label}">${symbol}${amount}<span class="marker-label">${label}</span></button>`;
+    return `<button class="${classes}" style="left:${def.x}%;top:${def.y}%" data-id="${def.id}" aria-label="${label}">${symbol}${playerBadge}${amount}<span class="marker-label">${label}</span></button>`;
   }).join('');
   el('markers').querySelectorAll('.marker').forEach(btn => {
     btn.addEventListener('click', event => {
@@ -504,9 +559,9 @@ function optimize() {
   const plans = bestAssign.map((list, i) => {
     const used = bestBins[i];
     const text = list.length
-      ? list.map(x => `${x.bonus ? '★' : ''}${x.def.floor} ${TYPE_INFO[x.type].label} ${Number(x.value) > 0 ? money(x.value) : '（金額未入力）'}`).join('<br>')
+      ? list.map(x => `${x.bonus ? '★' : ''}${x.def.name}・${TYPE_INFO[x.type].label} ${Number(x.value) > 0 ? money(x.value) : '（金額未入力）'}`).join('<br>')
       : '回収なし';
-    return `<div class="player-plan"><b>プレイヤー${i + 1}：${used}% / 100%</b>${text}</div>`;
+    return `<button type="button" class="player-plan ${highlightedPlayer === i ? 'active' : ''}" data-highlight-player="${i}"><b>プレイヤー${i + 1}：${used}% / 100%</b><span>${text}</span></button>`;
   }).join('');
 
   el('optimizerResult').className = 'optimizer-result';
@@ -516,9 +571,19 @@ function optimize() {
   const heading = hasUnknownValues
     ? `<strong>推奨回収：${selectedItems.length}個</strong><br><span class="muted-note">金額未入力を含むため、同価値として容量効率を優先しています。入力済み金額の合計：${money(knownTotal)}</span>`
     : `<strong>推奨回収額：${money(knownTotal)}</strong>`;
+  latestOptimization = {
+    signature: optimizationSignature(),
+    assignments: bestAssign,
+    loads: bestBins
+  };
+  highlightedPlayer = null;
   el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a, b) => a + b, 0)}% / ${players * 100}%${plans}`;
+  el('optimizerResult').querySelectorAll('[data-highlight-player]').forEach(button => {
+    button.addEventListener('click', () => setHighlightedPlayer(Number(button.dataset.highlightPlayer)));
+  });
+  renderPlayerSelector();
 }
-function renderAll() { renderTabs(); renderMap(); renderEditor(); renderSummary(); }
+function renderAll() { renderTabs(); renderMap(); renderEditor(); renderSummary(); renderPlayerSelector(); }
 
 function bind() {
   el('closeEditorButton').addEventListener('click', () => {
@@ -553,7 +618,7 @@ function bind() {
     setSpot(state.selectedSpot, { bonus: e.target.checked });
   });
   el('clearSpotButton').addEventListener('click', () => { state.spots[state.selectedSpot] = blankSpot(SPOT_DEFS[state.selectedSpot]); persist(); renderAll(); });
-  el('playerCount').addEventListener('change', e => { state.players = Number(e.target.value); persist(); });
+  el('playerCount').addEventListener('change', e => { state.players = Number(e.target.value); latestOptimization = null; highlightedPlayer = null; persist(); renderAll(); el('optimizerResult').textContent = '人数を変更しました。もう一度計算してください。'; });
   el('optimizeButton').addEventListener('click', optimize);
   el('shareButton').addEventListener('click', async () => {
     const url = `${location.origin}${location.pathname}?d=${encodePayload()}`;
@@ -562,7 +627,7 @@ function bind() {
   });
   el('resetButton').addEventListener('click', () => {
     if (!confirm('入力内容をすべて消去しますか？')) return;
-    state.spots = {}; state.selectedSpot = null; persist(); renderAll(); el('optimizerResult').textContent = '入力後に計算できます。'; toast('全消去しました');
+    state.spots = {}; state.selectedSpot = null; latestOptimization = null; highlightedPlayer = null; persist(); renderAll(); el('optimizerResult').textContent = '入力後に計算できます。'; toast('全消去しました');
   });
 }
 function toast(msg) { const t=el('toast'); t.textContent=msg; t.classList.add('show'); clearTimeout(toast.timer); toast.timer=setTimeout(()=>t.classList.remove('show'),2200); }

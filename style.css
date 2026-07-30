@@ -298,3 +298,91 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
   font-size: 12px;
   line-height: 1.5;
 }
+
+
+/* v17: プレイヤー別の取得地点ハイライト */
+.player-highlight-controls {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.player-highlight-controls.hidden { display: none; }
+.player-highlight-controls > span { color: var(--muted); font-size: 12px; margin-right: 2px; }
+.player-filter {
+  min-width: 42px;
+  padding: 6px 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: #10151c;
+  color: var(--text);
+  cursor: pointer;
+}
+.player-filter.active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #07130c;
+  font-weight: 800;
+}
+.player-plan {
+  display: block;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-top: 1px solid var(--border);
+  border-radius: 0;
+  margin-top: 8px;
+  padding: 8px 6px 4px;
+  cursor: pointer;
+  line-height: 1.55;
+}
+.player-plan:hover,
+.player-plan.active { background: rgba(255,255,255,.055); }
+.player-plan.active { box-shadow: inset 3px 0 0 var(--accent); }
+.player-plan span { display: block; }
+.marker.player-dimmed {
+  opacity: .18;
+  filter: grayscale(.8);
+}
+.marker.player-dimmed:hover,
+.marker.player-dimmed.selected { opacity: .72; }
+.marker.player-highlight {
+  z-index: 10;
+}
+.marker.player-highlight::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border: 3px solid #6ee7ff;
+  border-radius: 50%;
+  box-shadow: 0 0 0 3px rgba(0,0,0,.7), 0 0 20px 7px rgba(110,231,255,.7);
+  z-index: -2;
+}
+.marker.player-highlight.bonus::before {
+  inset: -8px;
+  border: 3px solid #6ee7ff;
+  background: rgba(255,212,59,.2);
+  box-shadow: 0 0 0 3px rgba(0,0,0,.7), 0 0 20px 7px rgba(110,231,255,.7);
+}
+.player-marker-badge {
+  position: absolute;
+  left: -8px;
+  top: -10px;
+  min-width: 25px;
+  height: 25px;
+  padding: 0 5px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  border: 2px solid #fff;
+  background: #087a92;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: 0 2px 6px rgba(0,0,0,.75);
+  z-index: 4;
+}
