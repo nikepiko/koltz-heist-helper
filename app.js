@@ -360,11 +360,30 @@ function updateVisualViewportVars() {
   const viewport = window.visualViewport;
   const scale = viewport && Number.isFinite(viewport.scale) ? Math.max(1, viewport.scale) : 1;
   const inverse = 1 / scale;
-  const keyboardOffset = viewport
-    ? Math.max(0, window.innerHeight - (viewport.offsetTop + viewport.height))
-    : 0;
+
+  const offsetLeft = viewport ? viewport.offsetLeft : 0;
+  const offsetTop = viewport ? viewport.offsetTop : 0;
+  const visibleWidth = viewport ? viewport.width : window.innerWidth;
+  const visibleHeight = viewport ? viewport.height : window.innerHeight;
+
+  // Desired sizes are expressed in unzoomed visual pixels. The outer shell is
+  // sized in visualViewport CSS coordinates, while the inner card is inverse-
+  // scaled. This keeps both the sheet outline and its typography stable.
+  const marginVisual = 8;
+  const availableVisualWidth = Math.max(240, visibleWidth * scale - marginVisual * 2);
+  const availableVisualHeight = Math.max(220, visibleHeight * scale - marginVisual * 2);
+  const editorVisualWidth = Math.min(420, availableVisualWidth);
+  const editorVisualHeight = Math.min(620, availableVisualHeight);
+  const shellWidth = editorVisualWidth / scale;
+  const shellHeight = editorVisualHeight / scale;
+
   document.documentElement.style.setProperty('--visual-zoom-inverse', String(inverse));
-  document.documentElement.style.setProperty('--visual-keyboard-offset', `${keyboardOffset}px`);
+  document.documentElement.style.setProperty('--visual-center-x', `${offsetLeft + visibleWidth / 2}px`);
+  document.documentElement.style.setProperty('--visual-bottom-y', `${offsetTop + visibleHeight - marginVisual / scale}px`);
+  document.documentElement.style.setProperty('--mobile-shell-width', `${shellWidth}px`);
+  document.documentElement.style.setProperty('--mobile-shell-height', `${shellHeight}px`);
+  document.documentElement.style.setProperty('--mobile-editor-width', `${editorVisualWidth}px`);
+  document.documentElement.style.setProperty('--mobile-editor-max-height', `${editorVisualHeight}px`);
 }
 
 function usesMobileEditor() {

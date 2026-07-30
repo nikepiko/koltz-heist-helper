@@ -281,6 +281,18 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
     overflow: auto;
   }
   .floating-editor-card::before { display: none; }
+
+  .floating-editor-card .floating-editor-heading {
+    flex: 0 0 auto;
+  }
+
+  .floating-editor-card .editor {
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
+  }
 }
 
 
@@ -387,13 +399,20 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
   z-index: 4;
 }
 
-/* v18: mobile pinch-zoom support.
-   Keep map markers at an approximately constant visual/tap size while the page is zoomed,
-   and pin the editor to the bottom of the visible viewport on phones. */
+/* Mobile pinch-zoom support.
+   The shell follows visualViewport without transforms. Only the inner editor is
+   inverse-scaled, so the panel outline, controls and type remain stable. */
 :root {
   --visual-zoom-inverse: 1;
-  --visual-keyboard-offset: 0px;
+  --visual-center-x: 50vw;
+  --visual-bottom-y: calc(100vh - 8px);
+  --mobile-shell-width: min(420px, calc(100vw - 16px));
+  --mobile-shell-height: min(620px, calc(100vh - 16px));
+  --mobile-editor-width: min(420px, calc(100vw - 16px));
+  --mobile-editor-max-height: min(620px, calc(100vh - 16px));
 }
+
+.mobile-editor-shell { display: contents; }
 
 @media (max-width: 700px), (pointer: coarse) {
   .marker {
@@ -406,27 +425,51 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
     transform: translate(-50%, -50%) scale(var(--visual-zoom-inverse));
   }
   .marker:hover .marker-icon,
-  .marker.selected .marker-icon {
-    transform: scale(1.12);
+  .marker.selected .marker-icon { transform: scale(1.12); }
+
+  .mobile-editor-shell {
+    display: block;
+    position: fixed;
+    left: var(--visual-center-x);
+    top: var(--visual-bottom-y);
+    width: var(--mobile-shell-width);
+    height: var(--mobile-shell-height);
+    transform: translate(-50%, -100%);
+    overflow: hidden;
+    pointer-events: none;
+    z-index: 80;
   }
 
   .floating-editor-card {
-    position: fixed !important;
-    left: 50% !important;
+    position: absolute !important;
+    left: 0 !important;
     right: auto !important;
     top: auto !important;
-    bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--visual-keyboard-offset)) !important;
-    width: min(420px, calc(100vw - 16px));
-    max-height: min(62vh, 520px);
-    overflow-y: auto;
-    transform: translateX(-50%) scale(var(--visual-zoom-inverse));
-    transform-origin: bottom center;
-    z-index: 80;
+    bottom: 0 !important;
+    width: var(--mobile-editor-width);
+    max-height: var(--mobile-editor-max-height);
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(var(--visual-zoom-inverse));
+    transform-origin: bottom left;
+    pointer-events: auto;
+    z-index: 1;
     overscroll-behavior: contain;
   }
+  .floating-editor-card.hidden { display: none !important; }
   .floating-editor-card::before { display: none; }
-
-  body.editor-open-mobile {
-    padding-bottom: 330px;
+  .floating-editor-card .floating-editor-heading { flex: 0 0 auto; }
+  .floating-editor-card .editor {
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+    padding-bottom: max(16px, env(safe-area-inset-bottom));
   }
+
+  body.editor-open-mobile { padding-bottom: 0; }
 }
+
