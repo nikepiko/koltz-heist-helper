@@ -369,8 +369,11 @@ function renderSummary() {
 }
 
 function optimize() {
-  const players = Number(state.players), cap = 100;
+  const players = Number(state.players);
+  const capUnits = 20; // 5%単位。100% = 20
+  const base = capUnits + 1;
   const items = activeItems().filter(x => currentWeight(x.type) > 0);
+
   if (!items.length) {
     el('optimizerResult').className = 'optimizer-result muted';
     el('optimizerResult').textContent = 'バッグ対象を入力してください。';
@@ -378,92 +381,126 @@ function optimize() {
   }
 
   const ordered = items
-    .map(item => ({ ...item, required: !item.def.isMain && item.bonus }))
+    .map(item => ({
+      ...item,
+      required: !item.def.isMain && item.bonus,
+      weightUnits: currentWeight(item.type) / 5
+    }))
     .sort((a, b) => {
       if (a.required !== b.required) return a.required ? -1 : 1;
-      return (optimizationValue(b) / currentWeight(b.type)) -
-             (optimizationValue(a) / currentWeight(a.type));
+      return (optimizationValue(b) / b.weightUnits) -
+             (optimizationValue(a) / a.weightUnits);
     });
 
-  // 同じ容量のバッグは区別しない。容量配列を常に昇順にそろえてメモ化することで、
-  // 4人時に爆発していた「各アイテムを各プレイヤーへ置く全探索」を大幅に削減する。
-  const memo = new Map();
-  const choices = new Map();
-  const impossible = Number.NEGATIVE_INFINITY;
-
-  function keyOf(i, loads) {
-    return `${i}|${loads.join(',')}`;
+  // 各バッグの使用量は5%刻みなので、昇順の容量配列を1つの整数に詰める。
+  // 例: 4人でも状態数は最大 C(24,4)=10,626 程度に収まる。
+  function encodeLoads(loads) {
+    let key = 0;
+    for (let i = 0; i < loads.length; i++) key = key * base + loads[i];
+    return key;
   }
 
-  function solve(i, loads) {
-    if (i >= ordered.length) return 0;
-    const key = keyOf(i, loads);
-    if (memo.has(key)) return memo.get(key);
-
-    const item = ordered[i];
-    const weight = currentWeight(item.type);
-    const value = optimizationValue(item);
-    let best = impossible;
-    let bestChoice = null;
-
-    // 任意対象だけは回収しない選択を許可する。
-    if (!item.required) {
-      best = solve(i + 1, loads);
-      bestChoice = { take: false };
+  function decodeLoads(key) {
+    const loads = Array(players);
+    for (let i = players - 1; i >= 0; i--) {
+      loads[i] = key % base;
+      key = Math.floor(key / base);
     }
+    return loads;
+  }
 
-    // 容量が同じバッグへの配置は結果が同一なので1回だけ試す。
-    const seenLoads = new Set();
-    for (let p = 0; p < loads.length; p++) {
-      if (seenLoads.has(loads[p])) continue;
-      seenLoads.add(loads[p]);
-      if (loads[p] + weight > cap) continue;
+  const initialKey = encodeLoads(Array(players).fill(0));
+  let states = new Map([[initialKey, 0]]);
+  const parents = [];
 
-      const nextLoads = loads.slice();
-      nextLoads[p] += weight;
-      nextLoads.sort((a, b) => a - b);
-      const tail = solve(i + 1, nextLoads);
-      if (tail === impossible) continue;
+  for (let i = 0; i < ordered.length; i++) {
+    const item = ordered[i];
+    const nextStates = new Map();
+    const nextParents = new Map();
 
-      const candidate = value + tail;
-      if (candidate > best) {
-        best = candidate;
-        bestChoice = { take: true, loadIndex: p };
+    function update(nextKey, score, prevKey, took) {
+      const old = nextStates.get(nextKey);
+      if (old === undefined || score > old) {
+        nextStates.set(nextKey, score);
+        nextParents.set(nextKey, { prevKey, took });
       }
     }
 
-    memo.set(key, best);
-    choices.set(key, bestChoice);
-    return best;
+    for (const [key, score] of states) {
+      if (!item.required) update(key, score, key, false);
+
+      const loads = decodeLoads(key);
+      let previousLoad = -1;
+      for (let p = 0; p < players; p++) {
+        // 同じ使用量のバッグは区別しない。
+        if (loads[p] === previousLoad) continue;
+        previousLoad = loads[p];
+        if (loads[p] + item.weightUnits > capUnits) continue;
+
+        const nextLoads = loads.slice();
+        nextLoads[p] += item.weightUnits;
+        nextLoads.sort((a, b) => a - b);
+        const nextKey = encodeLoads(nextLoads);
+        update(nextKey, score + optimizationValue(item), key, true);
+      }
+    }
+
+    if (!nextStates.size) {
+      el('optimizerResult').className = 'optimizer-result';
+      el('optimizerResult').innerHTML = '<span class="warning">ボーナス対象を全員のバッグに収められません。</span><br>人数か対象設定を確認してください。';
+      return;
+    }
+
+    states = nextStates;
+    parents.push(nextParents);
   }
 
-  const initialLoads = Array(players).fill(0);
-  const bestValue = solve(0, initialLoads);
-  if (bestValue === impossible) {
-    el('optimizerResult').className = 'optimizer-result';
-    el('optimizerResult').innerHTML = '<span class="warning">ボーナス対象を全員のバッグに収められません。</span><br>人数か対象設定を確認してください。';
-    return;
-  }
-
-  // メモ化探索の選択を実際のプレイヤー別リストへ復元する。
-  const playerBins = Array.from({ length: players }, (_, id) => ({ id, load: 0, items: [] }));
-  let loads = initialLoads.slice();
-  for (let i = 0; i < ordered.length; i++) {
-    const choice = choices.get(keyOf(i, loads));
-    if (!choice) break;
-    if (choice.take) {
-      playerBins.sort((a, b) => a.load - b.load || a.id - b.id);
-      const bin = playerBins[choice.loadIndex];
-      const item = ordered[i];
-      bin.load += currentWeight(item.type);
-      bin.items.push(item);
-      loads = playerBins.map(x => x.load).sort((a, b) => a - b);
+  let bestKey = null;
+  let bestScore = Number.NEGATIVE_INFINITY;
+  for (const [key, score] of states) {
+    if (score > bestScore) {
+      bestScore = score;
+      bestKey = key;
     }
   }
-  playerBins.sort((a, b) => a.id - b.id);
 
-  const bestBins = playerBins.map(x => x.load);
-  const bestAssign = playerBins.map(x => x.items);
+  // 選ばれたアイテムを後ろから復元し、その時点のバッグ容量へ割り当てる。
+  const finalLoads = decodeLoads(bestKey);
+  let bins = finalLoads.map((load, id) => ({ id, load, items: [] }));
+  let key = bestKey;
+
+  for (let i = ordered.length - 1; i >= 0; i--) {
+    const parent = parents[i].get(key);
+    if (!parent) break;
+
+    if (parent.took) {
+      const item = ordered[i];
+      const prevLoads = decodeLoads(parent.prevKey);
+
+      // 現在のどのバッグからこのアイテムを戻せば直前状態になるかを照合する。
+      let matched = false;
+      for (let b = 0; b < bins.length; b++) {
+        if (bins[b].load < item.weightUnits) continue;
+        const candidate = bins.map((bin, index) => bin.load - (index === b ? item.weightUnits : 0))
+          .sort((a, z) => a - z);
+        if (candidate.every((load, index) => load === prevLoads[index])) {
+          bins[b].load -= item.weightUnits;
+          bins[b].items.push(item);
+          bins.sort((a, z) => a.load - z.load || a.id - z.id);
+          matched = true;
+          break;
+        }
+      }
+      if (!matched) console.warn('最適化結果の復元に失敗しました:', item.def.id);
+    }
+
+    key = parent.prevKey;
+  }
+
+  // 復元後のloadは0へ戻るため、実際の使用量をアイテムから再計算する。
+  bins.sort((a, b) => a.id - b.id);
+  const bestAssign = bins.map(bin => bin.items.reverse());
+  const bestBins = bestAssign.map(list => list.reduce((sum, item) => sum + currentWeight(item.type), 0));
   const plans = bestAssign.map((list, i) => {
     const used = bestBins[i];
     const text = list.length
@@ -481,7 +518,6 @@ function optimize() {
     : `<strong>推奨回収額：${money(knownTotal)}</strong>`;
   el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a, b) => a + b, 0)}% / ${players * 100}%${plans}`;
 }
-
 function renderAll() { renderTabs(); renderMap(); renderEditor(); renderSummary(); }
 
 function bind() {
