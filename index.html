@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#11151b" />
+  <title>コルツセンター強盗 回収補助ツール</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div>
+      <h1>コルツセンター強盗 回収補助ツール</h1>
+      <p>各ドルマークを選び、ターゲット・金額・ボーナス対象を入力</p>
+    </div>
+    <div class="header-actions">
+      <button id="shareButton" class="primary">共有リンクをコピー</button>
+      <button id="resetButton" class="danger ghost">全消去</button>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section class="map-panel card">
+      <nav id="floorTabs" class="tabs" aria-label="階層切り替え"></nav>
+      <div class="map-toolbar">
+        <div class="legend">
+          <span><i class="legend-dot normal"></i>入力済み</span>
+          <span><i class="legend-dot bonus"></i>ボーナス対象</span>
+          <span><i class="legend-dot empty"></i>未入力</span>
+        </div>
+        <span id="floorProgress"></span>
+      </div>
+      <div id="mapViewport" class="map-viewport">
+        <div id="mapStage" class="map-stage">
+          <img id="mapImage" alt="フロアマップ" draggable="false" />
+          <div id="markers" class="markers"></div>
+        </div>
+      </div>
+      <section id="floatingEditorCard" class="floating-editor-card card hidden" aria-label="地点入力">
+        <div class="floating-editor-heading">
+          <h2>地点入力</h2>
+          <button id="closeEditorButton" type="button" class="floating-close" aria-label="閉じる">×</button>
+        </div>
+        <form id="editorForm" class="editor">
+          <div class="spot-title">
+            <strong id="spotName"></strong>
+            <span id="spotFloor" class="pill"></span>
+          </div>
+
+          <label id="typeField">
+            ターゲット種別
+            <select id="targetType">
+              <option value="none">なし／未確認</option>
+              <option value="painting">絵画</option>
+              <option value="reinforced">強化</option>
+              <option value="medium">中型（卵・像など）</option>
+              <option value="small">小型</option>
+            </select>
+          </label>
+
+          <label>
+            金額
+            <div class="money-input"><span>$</span><input id="targetValue" type="number" min="0" step="1000" inputmode="numeric" placeholder="例：250000" /></div>
+          </label>
+
+          <label id="bonusField" class="check-row">
+            <input id="targetBonus" type="checkbox" />
+            <span><strong>ボーナス対象</strong><small>黄色のマーク。最適化では必ず回収します。</small></span>
+          </label>
+
+          <label>
+            メモ（任意）
+            <input id="targetMemo" type="text" maxlength="80" placeholder="例：西側の部屋" />
+          </label>
+
+          <div class="editor-actions">
+            <button id="clearSpotButton" type="button" class="ghost">この地点を消去</button>
+          </div>
+        </form>
+      </section>
+    </section>
+
+    <aside class="sidebar">
+      <section class="card summary-card">
+        <h2>集計</h2>
+        <div class="stats-grid">
+          <div><span>入力済み</span><strong id="filledCount">0</strong></div>
+          <div><span>ボーナス</span><strong id="bonusCount">0</strong></div>
+          <div><span>総額</span><strong id="totalValue">$0</strong></div>
+          <div><span>バッグ量</span><strong id="totalWeight">0%</strong></div>
+        </div>
+      </section>
+
+      <section class="card optimizer-card">
+        <div class="section-heading">
+          <h2>最適回収</h2>
+          <label>参加人数
+            <select id="playerCount">
+              <option value="1">1人</option>
+              <option value="2" selected>2人</option>
+              <option value="3">3人</option>
+              <option value="4">4人</option>
+            </select>
+          </label>
+        </div>
+        <button id="optimizeButton" class="primary wide">最高額の組み合わせを計算</button>
+        <div id="optimizerResult" class="optimizer-result muted">入力後に計算できます。</div>
+      </section>
+    </aside>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
