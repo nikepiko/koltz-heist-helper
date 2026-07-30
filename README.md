@@ -1,6 +1,7 @@
 # コルツセンター強盗 回収補助ツール v12
 
 GitHub Pagesでそのまま公開できる静的Webツールです。
+https://nikepiko.github.io/koltz-heist-helper/
 
 ## 地点種類の設定
 
