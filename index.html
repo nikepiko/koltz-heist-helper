@@ -11,7 +11,7 @@
   <header class="topbar">
     <div>
       <h1>コルツセンター強盗 回収補助ツール</h1>
-      <p>各ドルマークを選び、ターゲット・金額・ボーナス対象を入力</p>
+      <p>クリックで詳細入力、ダブルクリックでターゲットのあり／なしを切り替え</p>
     </div>
     <div class="header-actions">
       <button id="shareButton" class="primary">共有リンクをコピー</button>
@@ -27,6 +27,7 @@
           <span><i class="legend-dot normal"></i>入力済み</span>
           <span><i class="legend-dot bonus"></i>ボーナス対象</span>
           <span><i class="legend-dot empty"></i>未入力</span>
+          <span class="legend-help">ダブルクリック：アイコンの表示／非表示</span>
         </div>
         <span id="floorProgress"></span>
       </div>
@@ -47,15 +48,9 @@
             <span id="spotFloor" class="pill"></span>
           </div>
 
-          <label id="typeField">
-            ターゲット種別
-            <select id="targetType">
-              <option value="none">なし／未確認</option>
-              <option value="painting">絵画</option>
-              <option value="reinforced">強化</option>
-              <option value="medium">中型（卵・像など）</option>
-              <option value="small">小型</option>
-            </select>
+          <label id="targetExistsField" class="check-row">
+            <input id="targetExists" type="checkbox" />
+            <span><strong>ターゲットあり</strong><small>地点に回収物がある場合にオンにします。</small></span>
           </label>
 
           <label>
@@ -68,10 +63,6 @@
             <span><strong>ボーナス対象</strong><small>黄色のマーク。最適化では必ず回収します。</small></span>
           </label>
 
-          <label>
-            メモ（任意）
-            <input id="targetMemo" type="text" maxlength="80" placeholder="例：西側の部屋" />
-          </label>
 
           <div class="editor-actions">
             <button id="clearSpotButton" type="button" class="ghost">この地点を消去</button>
@@ -110,6 +101,7 @@
   </main>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
+  <script src="config.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

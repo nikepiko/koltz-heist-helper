@@ -282,3 +282,19 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
   }
   .floating-editor-card::before { display: none; }
 }
+
+
+/* v9: quick-mark mode */
+.marker-status {
+  color: #ffe38a;
+  border: 1px solid rgba(255, 211, 96, .42);
+}
+.legend-help {
+  color: var(--muted);
+  font-size: 12px;
+}
+.muted-note {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}

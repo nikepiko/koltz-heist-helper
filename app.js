@@ -6,7 +6,7 @@ const FLOORS = {
     spots: [
       ['2f-01', 77.27, 40.21], ['2f-02', 76.99, 53.13], ['2f-03', 77.06, 65.50],
       ['2f-04', 77.17, 79.07], ['2f-05', 76.22, 85.29], ['2f-06', 91.66, 91.08],
-      ['2f-7', 81.99, 95.43], ['2f-8', 67.53, 95.63], ['2f-9', 54.41, 95.44],
+      ['2f-07', 81.99, 95.43], ['2f-08', 67.53, 95.63], ['2f-09', 54.41, 95.44],
       ['2f-10', 54.36, 86.33], ['2f-11', 47.07, 86.47], ['2f-12', 26.21, 82.50],
       ['2f-13', 26.21, 72.50]
     ]
@@ -15,10 +15,10 @@ const FLOORS = {
     image: 'assets/1F.png',
     // 左端から近い地点を順にたどり、上側のまとまりから下側へ抜ける一筆書き順。
     spots: [
-      ['1f-07', 13.13, 63.25], ['1f-02', 37.54, 43.01], ['1f-04', 55.27, 46.39],
-      ['1f-05', 55.29, 50.00], ['1f-06', 61.82, 52.07], ['1f-03', 71.14, 44.62],
-      ['1f-01', 65.86, 40.72], ['1f-08', 62.09, 76.46], ['1f-09', 55.25, 80.32],
-      ['1f-11', 66.21, 87.58], ['1f-10', 71.47, 83.72], ['1f-12', 74.54, 96.50]
+      ['1f-01', 13.13, 63.25], ['1f-02', 37.54, 43.01], ['1f-03', 55.27, 46.39],
+      ['1f-04', 55.29, 50.00], ['1f-05', 61.82, 52.07], ['1f-06', 71.14, 44.62],
+      ['1f-07', 65.86, 40.72], ['1f-08', 62.09, 76.46], ['1f-09', 55.25, 80.32],
+      ['1f-10', 66.21, 87.58], ['1f-11', 71.47, 83.72], ['1f-12', 74.54, 96.50]
     ]
   },
   'B1': {
@@ -30,9 +30,9 @@ const FLOORS = {
   '金庫室': {
     image: 'assets/vault.png',
     spots: [
-      ['vault-main', 49.5, 88.0, 'main'],
-      ['vault-p1', 22.4, 44.5, 'paintingOnly'], ['vault-p2', 76.3, 48.0, 'paintingOnly'],
-      ['vault-p3', 22.4, 63.5, 'paintingOnly'], ['vault-p4', 76.3, 67.1, 'paintingOnly']
+      ['vault-main', 49.5, 88.0],
+      ['vault-p1', 22.4, 44.5], ['vault-p2', 76.3, 48.0],
+      ['vault-p3', 22.4, 63.5], ['vault-p4', 76.3, 67.1]
     ]
   }
 };
@@ -47,7 +47,6 @@ const TYPE_INFO = {
 };
 
 const STORAGE_KEY = 'koltz-helper-v1';
-const CONFIG = { mediumWeight: 25 };
 let state = { version: 1, currentFloor: '1F', selectedSpot: null, players: 2, spots: {} };
 
 const el = id => document.getElementById(id);
@@ -56,18 +55,38 @@ const money = n => new Intl.NumberFormat('ja-JP', { style: 'currency', currency:
 function allSpotDefs() {
   return Object.entries(FLOORS).flatMap(([floor, cfg]) => {
     let regularIndex = 0;
-    return cfg.spots.map(s => {
-      const fixed = s[3] || null;
-      const name = fixed === 'main' ? 'メインターゲット' : `${floor} 地点${++regularIndex}`;
-      return { id: s[0], x: s[1], y: s[2], fixed, floor, name };
+    return cfg.spots.map(([id, x, y]) => {
+      const type = SPOT_TYPES[id];
+      if (!type) throw new Error(`SPOT_TYPES に ${id} の設定がありません`);
+      const isMain = type === 'main';
+      const name = isMain ? 'メインターゲット' : `${floor} 地点${++regularIndex}`;
+      return { id, x, y, type, isMain, floor, name };
     });
   });
 }
 const SPOT_DEFS = Object.fromEntries(allSpotDefs().map(s => [s.id, s]));
 
 function blankSpot(def) {
-  return { type: def.fixed === 'main' ? 'main' : 'none', value: '', bonus: false, memo: '' };
+  return {
+    value: '',
+    exists: def.isMain,
+    bonus: false
+  };
 }
+
+function normalizeSpot(def, data) {
+  const spot = { ...blankSpot(def), ...(data || {}) };
+  // 旧版データからの移行。通常地点は金額がある場合だけ自動で「あり」にする。
+  if (typeof data?.exists !== 'boolean') {
+    spot.exists = def.isMain || Number(spot.value) > 0;
+  }
+  if (def.isMain) {
+    spot.exists = true;
+    spot.bonus = false;
+  }
+  return spot;
+}
+
 
 const TYPE_ICONS = {
   painting: 'assets/icons/painting.svg',
@@ -80,8 +99,33 @@ const TYPE_ICONS = {
 
 function iconFor(type) { return TYPE_ICONS[type] || TYPE_ICONS.none; }
 
-function getSpot(id) { return state.spots[id] || blankSpot(SPOT_DEFS[id]); }
-function setSpot(id, patch) { state.spots[id] = { ...getSpot(id), ...patch }; persist(); renderAll(); }
+function getSpot(id) { return normalizeSpot(SPOT_DEFS[id], state.spots[id]); }
+function setSpot(id, patch) {
+  const def = SPOT_DEFS[id];
+  if (!def) return;
+  state.spots[id] = normalizeSpot(def, { ...getSpot(id), ...patch });
+  persist();
+  renderAll();
+}
+
+function toggleQuickMark(id) {
+  const def = SPOT_DEFS[id];
+  const data = getSpot(id);
+  if (!def || def.isMain) return;
+
+  // 金額入力済みの地点はダブルクリックでは消せない。
+  if (Number(data.value) > 0) {
+    toast('金額入力済みの地点は「この地点を消去」から解除できます');
+    return;
+  }
+
+  const nextExists = !data.exists;
+  setSpot(id, {
+    exists: nextExists,
+    bonus: nextExists ? data.bonus : false
+  });
+  toast(nextExists ? 'アイコンを表示しました' : 'アイコンを非表示にしました');
+}
 
 function persist() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
@@ -91,7 +135,7 @@ function load() {
     const params = new URLSearchParams(location.search);
     const shared = params.get('d');
     if (shared) {
-      state = { ...state, ...JSON.parse(decodePayload(shared)) };
+      state = { ...state, ...decodePayload(shared) };
       history.replaceState(null, '', location.pathname);
       toast('共有データを読み込みました');
       return;
@@ -100,16 +144,115 @@ function load() {
     if (local) state = { ...state, ...JSON.parse(local) };
   } catch (e) { console.warn('データの読み込みに失敗', e); }
 }
-function encodePayload(obj) {
-  const bytes = new TextEncoder().encode(JSON.stringify(obj));
-  let binary = ''; bytes.forEach(b => binary += String.fromCharCode(b));
-  return btoa(binary).replaceAll('+','-').replaceAll('/','_').replaceAll('=','');
+// 共有リンク用の圧縮形式。
+// 地点IDや空欄をJSONに含めず、固定された地点順と数値だけをバイナリ化する。
+const SHARE_FORMAT_VERSION = 2;
+const SHARE_SPOT_ORDER = allSpotDefs().map(def => def.id);
+
+function bytesToBase64Url(bytes) {
+  let binary = '';
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replaceAll('+', '-').replaceAll('/', '_').replaceAll('=', '');
 }
-function decodePayload(str) {
-  str = str.replaceAll('-','+').replaceAll('_','/');
+
+function base64UrlToBytes(str) {
+  str = str.replaceAll('-', '+').replaceAll('_', '/');
   while (str.length % 4) str += '=';
-  const binary = atob(str); const bytes = Uint8Array.from(binary, c => c.charCodeAt(0));
-  return new TextDecoder().decode(bytes);
+  const binary = atob(str);
+  return Uint8Array.from(binary, char => char.charCodeAt(0));
+}
+
+function pushVarUint(bytes, value) {
+  let remaining = Math.max(0, Math.trunc(Number(value) || 0));
+  do {
+    let byte = remaining % 128;
+    remaining = Math.floor(remaining / 128);
+    if (remaining > 0) byte |= 0x80;
+    bytes.push(byte);
+  } while (remaining > 0);
+}
+
+function readVarUint(bytes, cursor) {
+  let value = 0;
+  let multiplier = 1;
+  let byte;
+  do {
+    if (cursor.index >= bytes.length) throw new Error('共有データが途中で切れています');
+    byte = bytes[cursor.index++];
+    value += (byte & 0x7f) * multiplier;
+    multiplier *= 128;
+    if (multiplier > Number.MAX_SAFE_INTEGER) throw new Error('共有データの数値が大きすぎます');
+  } while (byte & 0x80);
+  return value;
+}
+
+function encodePayload() {
+  const records = [];
+
+  SHARE_SPOT_ORDER.forEach((id, index) => {
+    const def = SPOT_DEFS[id];
+    const spot = getSpot(id);
+    const defaultSpot = blankSpot(def);
+    const value = Math.max(0, Math.trunc(Number(spot.value) || 0));
+
+    const differsFromDefault =
+      spot.exists !== defaultSpot.exists ||
+      spot.bonus !== defaultSpot.bonus ||
+      value > 0;
+
+    if (!differsFromDefault) return;
+
+    let flags = 0;
+    if (spot.exists) flags |= 0x01;
+    if (spot.bonus) flags |= 0x02;
+    if (value > 0) flags |= 0x04;
+
+    records.push({ index, flags, value });
+  });
+
+  const bytes = [SHARE_FORMAT_VERSION, Math.max(1, Math.min(4, Number(state.players) || 2)), records.length];
+  for (const record of records) {
+    bytes.push(record.index, record.flags);
+    if (record.flags & 0x04) pushVarUint(bytes, record.value);
+  }
+  return bytesToBase64Url(Uint8Array.from(bytes));
+}
+
+function decodeCompactPayload(bytes) {
+  const cursor = { index: 0 };
+  const version = bytes[cursor.index++];
+  if (version !== SHARE_FORMAT_VERSION) throw new Error(`未対応の共有形式です: ${version}`);
+
+  const players = bytes[cursor.index++];
+  const recordCount = bytes[cursor.index++];
+  const spots = {};
+
+  for (let i = 0; i < recordCount; i++) {
+    if (cursor.index + 1 >= bytes.length) throw new Error('共有データが途中で切れています');
+    const spotIndex = bytes[cursor.index++];
+    const flags = bytes[cursor.index++];
+    const id = SHARE_SPOT_ORDER[spotIndex];
+    if (!id) throw new Error(`共有データに不明な地点番号があります: ${spotIndex}`);
+
+    const value = flags & 0x04 ? readVarUint(bytes, cursor) : 0;
+    spots[id] = {
+      exists: Boolean(flags & 0x01),
+      bonus: Boolean(flags & 0x02),
+      value: value > 0 ? String(value) : ''
+    };
+  }
+
+  return { version: 1, players: Math.max(1, Math.min(4, players || 2)), spots };
+}
+
+function decodePayload(str) {
+  const bytes = base64UrlToBytes(str);
+
+  // v13以前のJSON形式も読み込み可能にしておく。
+  if (bytes[0] === 0x7b) {
+    return JSON.parse(new TextDecoder().decode(bytes));
+  }
+  return decodeCompactPayload(bytes);
 }
 
 function renderTabs() {
@@ -125,25 +268,35 @@ function renderMap() {
   el('mapImage').alt = `${state.currentFloor} マップ`;
   el('markers').innerHTML = cfg.spots.map((raw, idx) => {
     const def = SPOT_DEFS[raw[0]], data = getSpot(def.id);
-    const filled = data.type !== 'none' && (Number(data.value) > 0 || data.type === 'main');
-    const isBonus = def.fixed !== 'main' && data.bonus;
+    const filled = data.exists;
+    const isBonus = !def.isMain && data.bonus;
     const classes = [
-      'marker', `type-${data.type}`,
-      data.type === 'none' ? 'empty' : '', filled ? 'filled' : '', isBonus ? 'bonus' : '',
-      def.fixed === 'main' ? 'main' : '', state.selectedSpot === def.id ? 'selected' : '',
+      'marker', `type-${filled ? def.type : 'none'}`, 
+      !filled ? 'empty' : '', filled ? 'filled' : '', isBonus ? 'bonus' : '',
+      def.isMain ? 'main' : '', state.selectedSpot === def.id ? 'selected' : '',
       def.y >= 84 ? 'near-bottom' : '', def.x <= 10 ? 'near-left' : '', def.x >= 90 ? 'near-right' : ''
     ].filter(Boolean).join(' ');
-    const symbol = `<span class="marker-icon"><img src="${iconFor(data.type)}" alt="" draggable="false"></span>`;
-    const label = `${def.name}${data.type !== 'none' ? `・${TYPE_INFO[data.type].label}` : ''}${data.value ? `・${money(data.value)}` : ''}`;
-    const amount = Number(data.value) > 0 ? `<span class="marker-amount">${money(data.value)}</span>` : '';
+    const visibleType = filled ? def.type : 'none';
+    const symbol = `<span class="marker-icon"><img src="${iconFor(visibleType)}" alt="" draggable="false"></span>`;
+    const label = `${def.name}${filled ? `・${TYPE_INFO[def.type].label}` : ''}${Number(data.value) > 0 ? `・${money(data.value)}` : ''}`;
+    const amount = Number(data.value) > 0
+      ? `<span class="marker-amount">${money(data.value)}</span>`
+      : '';
     return `<button class="${classes}" style="left:${def.x}%;top:${def.y}%" data-id="${def.id}" aria-label="${label}">${symbol}${amount}<span class="marker-label">${label}</span></button>`;
   }).join('');
-  el('markers').querySelectorAll('.marker').forEach(btn => btn.addEventListener('click', event => {
-    event.stopPropagation();
-    state.selectedSpot = btn.dataset.id; persist(); renderAll();
-  }));
+  el('markers').querySelectorAll('.marker').forEach(btn => {
+    btn.addEventListener('click', event => {
+      event.stopPropagation();
+      state.selectedSpot = btn.dataset.id; persist(); renderAll();
+    });
+    btn.addEventListener('dblclick', event => {
+      event.preventDefault();
+      event.stopPropagation();
+      toggleQuickMark(btn.dataset.id);
+    });
+  });
   const floorDefs = cfg.spots.map(s => SPOT_DEFS[s[0]]);
-  const completed = floorDefs.filter(d => getSpot(d.id).type !== 'none' && Number(getSpot(d.id).value) > 0).length;
+  const completed = floorDefs.filter(d => getSpot(d.id).exists || d.isMain).length;
   el('floorProgress').textContent = `${completed} / ${floorDefs.length} 地点入力`;
 }
 
@@ -187,31 +340,31 @@ function renderEditor() {
   const def = SPOT_DEFS[id], data = getSpot(id);
   el('spotName').textContent = def.name;
   el('spotFloor').textContent = def.floor;
-  el('targetType').value = data.type;
+  el('targetExists').checked = data.exists;
   el('targetValue').value = data.value;
-  el('targetBonus').checked = def.fixed === 'main' ? false : data.bonus;
-  el('targetMemo').value = data.memo;
-  const fixed = def.fixed;
-  const typeSelect = el('targetType');
-  [...typeSelect.options].forEach(option => {
-    option.hidden = fixed === 'paintingOnly' && !['none', 'painting'].includes(option.value);
-    option.disabled = option.hidden;
-  });
-  el('typeField').classList.toggle('hidden', fixed === 'main');
-  el('bonusField').classList.toggle('hidden', fixed === 'main');
+  el('targetBonus').checked = def.isMain ? false : data.bonus;
+  el('targetExistsField').classList.toggle('hidden', def.isMain);
+  el('bonusField').classList.toggle('hidden', def.isMain);
   requestAnimationFrame(positionFloatingEditor);
 }
 
-function currentWeight(type) { return type === 'medium' ? CONFIG.mediumWeight : TYPE_INFO[type].weight; }
+function currentWeight(type) { return type === 'medium' ? MEDIUM_WEIGHT : TYPE_INFO[type].weight; }
 function activeItems() {
   return allSpotDefs().map(def => ({ def, ...getSpot(def.id) }))
-    .filter(x => x.type !== 'none' && Number(x.value) > 0);
+    .filter(x => x.exists)
+    .map(x => ({ ...x, type: x.def.type }));
 }
+
+function optimizationValue(item) {
+  // 金額未入力の地点は同価値として扱い、バッグに多く収まる組み合わせを選ぶ。
+  return Number(item.value) > 0 ? Number(item.value) : 1;
+}
+
 function renderSummary() {
   const items = activeItems();
   el('filledCount').textContent = items.length;
-  el('bonusCount').textContent = items.filter(x => x.def.fixed !== 'main' && x.bonus).length;
-  el('totalValue').textContent = money(items.reduce((a,b) => a + Number(b.value), 0));
+  el('bonusCount').textContent = items.filter(x => !x.def.isMain && x.bonus).length;
+  el('totalValue').textContent = money(items.reduce((a,b) => a + (Number(b.value) > 0 ? Number(b.value) : 0), 0));
   el('totalWeight').textContent = `${items.reduce((a,b) => a + currentWeight(b.type), 0)}%`;
 }
 
@@ -220,8 +373,8 @@ function optimize() {
   const items = activeItems().filter(x => currentWeight(x.type) > 0);
   if (!items.length) { el('optimizerResult').className = 'optimizer-result muted'; el('optimizerResult').textContent = 'バッグ対象を入力してください。'; return; }
 
-  const required = items.filter(x => x.def.fixed !== 'main' && x.bonus);
-  const optional = items.filter(x => x.def.fixed === 'main' || !x.bonus);
+  const required = items.filter(x => !x.def.isMain && x.bonus);
+  const optional = items.filter(x => x.def.isMain || !x.bonus);
   const bins = Array(players).fill(0);
   const assignments = Array.from({length: players}, () => []);
 
@@ -244,24 +397,24 @@ function optimize() {
     return;
   }
 
-  let bestValue = required.reduce((s,x)=>s+Number(x.value),0);
+  let bestValue = required.reduce((s,x)=>s+optimizationValue(x),0);
   let bestBins = bins.slice();
   let bestAssign = assignments.map(a=>a.slice());
-  optional.sort((a,b) => (Number(b.value)/currentWeight(b.type)) - (Number(a.value)/currentWeight(a.type)));
+  optional.sort((a,b) => (optimizationValue(b)/currentWeight(b.type)) - (optimizationValue(a)/currentWeight(a.type)));
 
   function dfs(i, value) {
     if (i >= optional.length) {
       if (value > bestValue) { bestValue = value; bestBins = bins.slice(); bestAssign = assignments.map(a=>a.slice()); }
       return;
     }
-    const optimistic = value + optional.slice(i).reduce((s,x)=>s+Number(x.value),0);
+    const optimistic = value + optional.slice(i).reduce((s,x)=>s+optimizationValue(x),0);
     if (optimistic <= bestValue) return;
     const item = optional[i], w = currentWeight(item.type);
     const seenLoads = new Set();
     for (let p=0; p<players; p++) {
       if (bins[p] + w <= cap && !seenLoads.has(bins[p])) {
         seenLoads.add(bins[p]); bins[p] += w; assignments[p].push(item);
-        dfs(i+1, value + Number(item.value));
+        dfs(i+1, value + optimizationValue(item));
         assignments[p].pop(); bins[p] -= w;
       }
     }
@@ -271,11 +424,16 @@ function optimize() {
 
   const plans = bestAssign.map((list, i) => {
     const used = bestBins[i];
-    const text = list.length ? list.map(x => `${x.bonus ? '★' : ''}${x.def.floor} ${TYPE_INFO[x.type].label} ${money(x.value)}`).join('<br>') : '回収なし';
+    const text = list.length ? list.map(x => `${x.bonus ? '★' : ''}${x.def.floor} ${TYPE_INFO[x.type].label} ${Number(x.value) > 0 ? money(x.value) : '（金額未入力）'}`).join('<br>') : '回収なし';
     return `<div class="player-plan"><b>プレイヤー${i+1}：${used}% / 100%</b>${text}</div>`;
   }).join('');
   el('optimizerResult').className = 'optimizer-result';
-  el('optimizerResult').innerHTML = `<strong>推奨回収額：${money(bestValue)}</strong><br>バッグ使用量：${bestBins.reduce((a,b)=>a+b,0)}% / ${players*100}%${plans}`;
+  const hasUnknownValues = bestAssign.flat().some(x => Number(x.value) <= 0);
+  const knownTotal = bestAssign.flat().reduce((sum, x) => sum + (Number(x.value) > 0 ? Number(x.value) : 0), 0);
+  const heading = hasUnknownValues
+    ? `<strong>推奨回収：${bestAssign.flat().length}個</strong><br><span class="muted-note">金額未入力を含むため、同価値として容量効率を優先しています。入力済み金額の合計：${money(knownTotal)}</span>`
+    : `<strong>推奨回収額：${money(knownTotal)}</strong>`;
+  el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a,b)=>a+b,0)}% / ${players*100}%${plans}`;
 }
 
 function renderAll() { renderTabs(); renderMap(); renderEditor(); renderSummary(); }
@@ -293,20 +451,30 @@ function bind() {
     persist();
     renderAll();
   });
-  el('targetType').addEventListener('change', e => setSpot(state.selectedSpot, { type: e.target.value }));
-  el('targetValue').addEventListener('input', e => setSpot(state.selectedSpot, { value: e.target.value }));
+  el('targetExists').addEventListener('change', e => {
+    const data = getSpot(state.selectedSpot);
+    if (!e.target.checked && Number(data.value) > 0) {
+      e.target.checked = true;
+      toast('金額入力済みの地点はターゲットなしにできません');
+      return;
+    }
+    setSpot(state.selectedSpot, { exists: e.target.checked, bonus: e.target.checked ? data.bonus : false });
+  });
+  el('targetValue').addEventListener('input', e => {
+    const value = e.target.value;
+    const data = getSpot(state.selectedSpot);
+    setSpot(state.selectedSpot, { value, exists: Number(value) > 0 ? true : data.exists });
+  });
   el('targetBonus').addEventListener('change', e => {
     const def = SPOT_DEFS[state.selectedSpot];
-    if (!def || def.fixed === 'main') return;
+    if (!def || def.isMain) return;
     setSpot(state.selectedSpot, { bonus: e.target.checked });
   });
-  el('targetMemo').addEventListener('input', e => setSpot(state.selectedSpot, { memo: e.target.value }));
   el('clearSpotButton').addEventListener('click', () => { state.spots[state.selectedSpot] = blankSpot(SPOT_DEFS[state.selectedSpot]); persist(); renderAll(); });
   el('playerCount').addEventListener('change', e => { state.players = Number(e.target.value); persist(); });
   el('optimizeButton').addEventListener('click', optimize);
   el('shareButton').addEventListener('click', async () => {
-    const payload = { version: 1, spots: state.spots, players: state.players };
-    const url = `${location.origin}${location.pathname}?d=${encodePayload(payload)}`;
+    const url = `${location.origin}${location.pathname}?d=${encodePayload()}`;
     try { await navigator.clipboard.writeText(url); toast('共有リンクをコピーしました'); }
     catch { prompt('このリンクをコピーしてください', url); }
   });
