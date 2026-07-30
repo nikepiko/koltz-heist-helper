@@ -386,3 +386,47 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
   box-shadow: 0 2px 6px rgba(0,0,0,.75);
   z-index: 4;
 }
+
+/* v18: mobile pinch-zoom support.
+   Keep map markers at an approximately constant visual/tap size while the page is zoomed,
+   and pin the editor to the bottom of the visible viewport on phones. */
+:root {
+  --visual-zoom-inverse: 1;
+  --visual-keyboard-offset: 0px;
+}
+
+@media (max-width: 700px), (pointer: coarse) {
+  .marker {
+    transform: translate(-50%, -50%) scale(var(--visual-zoom-inverse));
+    transform-origin: center;
+    transition: none;
+  }
+  .marker:hover,
+  .marker.selected {
+    transform: translate(-50%, -50%) scale(var(--visual-zoom-inverse));
+  }
+  .marker:hover .marker-icon,
+  .marker.selected .marker-icon {
+    transform: scale(1.12);
+  }
+
+  .floating-editor-card {
+    position: fixed !important;
+    left: 50% !important;
+    right: auto !important;
+    top: auto !important;
+    bottom: calc(10px + env(safe-area-inset-bottom, 0px) + var(--visual-keyboard-offset)) !important;
+    width: min(420px, calc(100vw - 16px));
+    max-height: min(62vh, 520px);
+    overflow-y: auto;
+    transform: translateX(-50%) scale(var(--visual-zoom-inverse));
+    transform-origin: bottom center;
+    z-index: 80;
+    overscroll-behavior: contain;
+  }
+  .floating-editor-card::before { display: none; }
+
+  body.editor-open-mobile {
+    padding-bottom: 330px;
+  }
+}

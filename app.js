@@ -355,16 +355,39 @@ function renderMap() {
   el('floorProgress').textContent = `${completed} / ${floorDefs.length} 地点入力`;
 }
 
+
+function updateVisualViewportVars() {
+  const viewport = window.visualViewport;
+  const scale = viewport && Number.isFinite(viewport.scale) ? Math.max(1, viewport.scale) : 1;
+  const inverse = 1 / scale;
+  const keyboardOffset = viewport
+    ? Math.max(0, window.innerHeight - (viewport.offsetTop + viewport.height))
+    : 0;
+  document.documentElement.style.setProperty('--visual-zoom-inverse', String(inverse));
+  document.documentElement.style.setProperty('--visual-keyboard-offset', `${keyboardOffset}px`);
+}
+
+function usesMobileEditor() {
+  return window.matchMedia('(max-width: 700px), (pointer: coarse)').matches;
+}
+
 function positionFloatingEditor() {
   const card = el('floatingEditorCard');
   const id = state.selectedSpot;
-  if (!id) { card.classList.add('hidden'); return; }
+  if (!id) { card.classList.add('hidden'); document.body.classList.remove('editor-open-mobile'); return; }
+
+  card.classList.remove('hidden', 'open-left');
+  document.body.classList.toggle('editor-open-mobile', usesMobileEditor());
+  if (usesMobileEditor()) {
+    card.style.left = '';
+    card.style.top = '';
+    return;
+  }
 
   const marker = el('markers').querySelector(`[data-id="${CSS.escape(id)}"]`);
   const panel = document.querySelector('.map-panel');
   if (!marker || !panel) return;
 
-  card.classList.remove('hidden', 'open-left');
   const panelRect = panel.getBoundingClientRect();
   const markerRect = marker.getBoundingClientRect();
   const cardWidth = card.offsetWidth || 320;
@@ -591,6 +614,11 @@ function bind() {
   });
   el('mapViewport').addEventListener('scroll', () => requestAnimationFrame(positionFloatingEditor), { passive: true });
   window.addEventListener('resize', () => requestAnimationFrame(positionFloatingEditor));
+  window.addEventListener('resize', updateVisualViewportVars, { passive: true });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', updateVisualViewportVars, { passive: true });
+    window.visualViewport.addEventListener('scroll', updateVisualViewportVars, { passive: true });
+  }
   el('mapStage').addEventListener('click', event => {
     if (event.target.closest('.marker')) return;
     if (state.selectedSpot === null) return;
@@ -635,4 +663,5 @@ function toast(msg) { const t=el('toast'); t.textContent=msg; t.classList.add('s
 load();
 el('playerCount').value = String(state.players);
 bind();
+updateVisualViewportVars();
 renderAll();
