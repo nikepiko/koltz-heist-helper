@@ -6,15 +6,15 @@
 const SPOT_TYPES = {
   // ===== 2F =====
   '2f-01': 'medium',
-  '2f-02': 'medium',
-  '2f-03': 'medium',
+  '2f-02': 'reinforced',
+  '2f-03': 'reinforced',
   '2f-04': 'small',
   '2f-05': 'painting',
   '2f-06': 'painting',
   '2f-07': 'medium',
   '2f-08': 'reinforced',
   '2f-09': 'medium',
-  '2f-10': 'medium',
+  '2f-10': 'reinforced',
   '2f-11': 'small',
   '2f-12': 'painting',
   '2f-13': 'painting',
@@ -47,4 +47,4 @@ const SPOT_TYPES = {
 };
 
 // 中型ターゲットのバッグ使用率。必要になった場合だけ変更してください。
-const MEDIUM_WEIGHT = 25;
+const MEDIUM_WEIGHT = 20;
