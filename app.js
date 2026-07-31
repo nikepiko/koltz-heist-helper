@@ -47,6 +47,11 @@ const TYPE_INFO = {
 };
 
 const STORAGE_KEY = 'koltz-helper-v1';
+
+// 2F地点5〜11はソロでは回収できないため、1人時の最適化候補から除外する。
+const SOLO_UNAVAILABLE_SPOT_IDS = new Set([
+  '2f-05', '2f-06', '2f-07', '2f-08', '2f-09', '2f-10', '2f-11'
+]);
 let state = { version: 1, currentFloor: '1F', selectedSpot: null, players: 2, spots: {} };
 let latestOptimization = null;
 let highlightedPlayer = null;
@@ -469,7 +474,13 @@ function optimize() {
   const players = Number(state.players);
   const capUnits = 20; // 5%単位。100% = 20
   const base = capUnits + 1;
-  const items = activeItems().filter(x => currentWeight(x.type) > 0);
+  const bagItems = activeItems().filter(x => currentWeight(x.type) > 0);
+  const soloExcludedItems = players === 1
+    ? bagItems.filter(x => SOLO_UNAVAILABLE_SPOT_IDS.has(x.def.id))
+    : [];
+  const items = players === 1
+    ? bagItems.filter(x => !SOLO_UNAVAILABLE_SPOT_IDS.has(x.def.id))
+    : bagItems;
 
   if (!items.length) {
     el('optimizerResult').className = 'optimizer-result muted';
@@ -619,7 +630,10 @@ function optimize() {
     loads: bestBins
   };
   highlightedPlayer = null;
-  el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a, b) => a + b, 0)}% / ${players * 100}%${plans}`;
+  const soloExcludedNote = soloExcludedItems.length
+    ? `<br><span class="muted-note">ソロでは取得できないため、2F地点5〜11の入力済みアイテム${soloExcludedItems.length}個を計算から除外しました。</span>`
+    : '';
+  el('optimizerResult').innerHTML = `${heading}<br>バッグ使用量：${bestBins.reduce((a, b) => a + b, 0)}% / ${players * 100}%${soloExcludedNote}${plans}`;
   el('optimizerResult').querySelectorAll('[data-highlight-player]').forEach(button => {
     button.addEventListener('click', () => setHighlightedPlayer(Number(button.dataset.highlightPlayer)));
   });
