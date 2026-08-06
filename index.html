@@ -29,7 +29,7 @@
           <span><i class="legend-dot empty"></i>未入力</span>
           <span class="legend-help">ダブルクリック：アイコンの表示／非表示</span>
         </div>
-        <span id="floorProgress"></span>
+        <div class="toolbar-right"><span id="floorProgress"></span></div>
       </div>
       <div id="mapViewport" class="map-viewport">
         <div id="mapStage" class="map-stage">
@@ -54,15 +54,35 @@
             <span><strong>ターゲットあり</strong><small>地点に回収物がある場合にオンにします。</small></span>
           </label>
 
-          <label>
+          <label id="lootItemField">
+            アイテム
+            <select id="lootItem"></select>
+          </label>
+
+          <label id="targetPriceField">
             金額
-            <div class="money-input"><span>$</span><input id="targetValue" type="number" min="0" step="1000" inputmode="numeric" placeholder="例：250000" /></div>
+            <select id="targetPrice"></select>
+            <small id="priceHint" class="field-hint"></small>
           </label>
 
           <label id="bonusField" class="check-row">
             <input id="targetBonus" type="checkbox" />
             <span><strong>ボーナス対象</strong><small>黄色のマーク。最適化では必ず回収します。</small></span>
           </label>
+
+          <div id="mainTargetFields" class="main-target-fields hidden">
+            <div class="main-option-row">
+              <label class="check-row compact-check">
+                <input id="mainFirstTime" type="checkbox" />
+                <span><strong>週内初回</strong><small>未発覚4倍／発覚3倍</small></span>
+              </label>
+              <label class="check-row compact-check">
+                <input id="mainHardMode" type="checkbox" />
+                <span><strong>ハードモード</strong><small>ハード価格を使用</small></span>
+              </label>
+            </div>
+            <div id="mainPriceTable" class="main-price-table"></div>
+          </div>
 
 
           <div class="editor-actions">
@@ -77,9 +97,8 @@
       <section class="card summary-card">
         <h2>集計</h2>
         <div class="stats-grid">
-          <div><span>入力済み</span><strong id="filledCount">0</strong></div>
-          <div><span>ボーナス</span><strong id="bonusCount">0</strong></div>
-          <div><span>総額</span><strong id="totalValue">$0</strong></div>
+          <div><span>未発覚時 総額</span><strong id="noAlarmTotalValue">$0</strong></div>
+          <div><span>発覚時 総額</span><strong id="alarmTotalValue">$0</strong></div>
           <div><span>バッグ量</span><strong id="totalWeight">0%</strong></div>
         </div>
       </section>
@@ -87,13 +106,19 @@
       <section class="card optimizer-card">
         <div class="section-heading">
           <h2>最適回収</h2>
-          <label>参加人数
+        </div>
+        <div class="optimizer-settings">
+          <label class="player-count-setting"><span>参加人数</span>
             <select id="playerCount">
               <option value="1">1人</option>
               <option value="2" selected>2人</option>
               <option value="3">3人</option>
               <option value="4">4人</option>
             </select>
+          </label>
+          <label class="alpha-mail-check">
+            <input id="alphaMailDisguise" type="checkbox" />
+            <span>アルファメールの変装で潜入</span>
           </label>
         </div>
         <button id="optimizeButton" class="primary wide">最高額の組み合わせを計算</button>

@@ -24,8 +24,62 @@ h1 { margin: 0; font-size: clamp(20px, 3vw, 30px); }
 .card { background: linear-gradient(180deg, rgba(27,34,45,.96), rgba(21,26,34,.96)); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow); }
 .map-panel { overflow: hidden; min-width: 0; }
 .tabs { display: flex; gap: 8px; padding: 12px; border-bottom: 1px solid var(--border); overflow-x: auto; }
-.tab { border: 1px solid var(--border); background: #10151c; color: var(--muted); border-radius: 10px; padding: 10px 18px; font-weight: 700; white-space: nowrap; }
+.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  background: #10151c;
+  color: var(--muted);
+  border-radius: 10px;
+  padding: 10px 18px;
+  font-weight: 700;
+  white-space: nowrap;
+  transition: background-color .16s ease, border-color .16s ease, color .16s ease, box-shadow .16s ease;
+}
 .tab.active { color: #08120d; background: var(--accent); border-color: var(--accent); }
+
+/*
+ * 最適化結果の「全員」または「P1～P4」で回収物が存在する階層。
+ * 背景色は通常状態のまま維持し、青い縁取りとグローだけで通知します。
+ * これにより「現在表示中＝緑」「回収物あり＝青枠」の意味が混ざりません。
+ */
+.tab.has-route-loot {
+  border-color: #58a8ff;
+  box-shadow:
+    0 0 0 1px rgba(88,168,255,.35),
+    0 0 10px rgba(88,168,255,.30);
+}
+
+/*
+ * 現在表示中かつ回収物がある階層。
+ * active の緑背景はそのまま残し、外周だけ青色にします。
+ */
+.tab.active.has-route-loot {
+  color: #08120d;
+  background: var(--accent);
+  border-color: #58a8ff;
+  box-shadow:
+    0 0 0 1px rgba(88,168,255,.45),
+    0 0 12px rgba(88,168,255,.34);
+}
+
+.tab-label { line-height: 1; }
+.tab-route-count {
+  display: inline-grid;
+  place-items: center;
+  min-width: 20px;
+  height: 20px;
+  padding: 0 5px;
+  border-radius: 999px;
+  background: rgba(5,25,48,.72);
+  color: #fff;
+  font-size: 11px;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.18);
+}
 .map-toolbar { min-height: 42px; display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 8px 14px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 13px; }
 .legend { display: flex; flex-wrap: wrap; gap: 12px; }
 .legend span { display: inline-flex; gap: 6px; align-items: center; }
@@ -473,3 +527,171 @@ button.ghost { background: transparent; }.danger { color: #ffb0b0; border-color:
   body.editor-open-mobile { padding-bottom: 0; }
 }
 
+
+/* v25: item / price configuration UI */
+.editor select {
+  width: 100%;
+  margin-top: 6px;
+  border: 1px solid #394557;
+  background: #0f141b;
+  color: var(--text);
+  border-radius: 9px;
+  padding: 11px 12px;
+  font: inherit;
+}
+.editor select.is-default { color: #8e9aab; }
+.field-hint { display:block; margin-top:6px; color:var(--muted); line-height:1.4; }
+.main-target-fields { display:grid; gap:12px; }
+.main-price-table { display:grid; gap:8px; }
+.main-price-mode { border:1px solid var(--border); border-radius:10px; padding:10px; background:#111821; }
+.main-price-mode h3 { margin:0 0 7px; font-size:.95rem; }
+.main-price-grid { display:grid; grid-template-columns:1fr auto; gap:5px 12px; font-size:.9rem; }
+.main-price-grid span:nth-child(2n) { font-variant-numeric:tabular-nums; font-weight:700; }
+
+
+/* v26: メインターゲット価格と最適化表示の整理 */
+.toolbar-right { display: flex; align-items: center; justify-content: flex-end; gap: 12px; margin-left: auto; }
+.main-alarm-summary { display: flex; align-items: stretch; gap: 6px; color: var(--text); }
+.main-alarm-summary > span { display: grid; gap: 1px; min-width: 116px; padding: 5px 8px; border: 1px solid var(--border); border-radius: 8px; background: #10151c; }
+.main-alarm-summary small { color: var(--muted); font-size: 10px; font-weight: 650; }
+.main-alarm-summary strong { font-size: 12px; color: var(--accent); white-space: nowrap; }
+.main-alarm-summary .main-price-mode-badge { min-width: auto; display: grid; place-items: center; color: #07130c; background: var(--accent); border-color: var(--accent); font-size: 11px; font-weight: 850; }
+.main-option-row { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.compact-check { padding: 9px; }
+.compact-check small { font-size: 11px; }
+.main-editor-price-note { padding: 9px 10px; border: 1px solid var(--border); border-radius: 9px; color: var(--muted); font-size: 12px; line-height: 1.5; background: #10151c; }
+.player-filter[data-mode="all-targets"] { min-width: 88px; }
+.player-filter[data-mode="optimized-all"] { min-width: 52px; }
+@media (max-width: 760px) {
+  .map-toolbar { align-items: stretch; }
+  .toolbar-right { width: 100%; justify-content: space-between; flex-wrap: wrap; }
+  .main-alarm-summary { order: 2; width: 100%; }
+  .main-alarm-summary > span { flex: 1; min-width: 0; }
+  .main-alarm-summary .main-price-mode-badge { flex: 0 0 auto; }
+  .main-option-row { grid-template-columns: 1fr; }
+}
+
+/* v30: 最適化条件を縦並びにして、狭いサイドバーでも崩れないようにする */
+.optimizer-settings {
+  display: grid;
+  gap: 12px;
+  margin-top: 4px;
+}
+.player-count-setting {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+.player-count-setting > span {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 750;
+}
+.player-count-setting select {
+  width: 100%;
+  min-width: 0;
+}
+.alpha-mail-check {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #3e5e49;
+  border-radius: 10px;
+  background: rgba(88,214,141,.06);
+  color: var(--text);
+  cursor: pointer;
+}
+.alpha-mail-check input {
+  flex: 0 0 auto;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+.alpha-mail-check span {
+  min-width: 0;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.optimizer-card .wide { margin-top: 12px; }
+
+/* v40: responsive marker sizing and label-aware collision layout */
+.map-stage { --marker-size: 48px; }
+.marker {
+  width: var(--marker-size);
+  height: var(--marker-size);
+  transform: translate(calc(-50% + var(--marker-offset-x, 0px)), calc(-50% + var(--marker-offset-y, 0px)));
+}
+.marker:hover,
+.marker.selected {
+  transform: translate(calc(-50% + var(--marker-offset-x, 0px)), calc(-50% + var(--marker-offset-y, 0px))) scale(1.1);
+  z-index: 20;
+}
+.marker-icon {
+  width: calc(var(--marker-size) - 4px);
+  height: calc(var(--marker-size) - 4px);
+}
+.marker.empty .marker-icon {
+  width: calc(var(--marker-size) - 12px);
+  height: calc(var(--marker-size) - 12px);
+}
+.marker-amount,
+.marker-label { z-index: 3; }
+.marker.amount-top .marker-amount,
+.marker.amount-top .marker-label {
+  left: 50%; top: auto; bottom: calc(100% + 6px); transform: translateX(-50%);
+}
+.marker.amount-right .marker-amount,
+.marker.amount-right .marker-label {
+  left: calc(100% + 6px); right: auto; top: 50%; bottom: auto; transform: translateY(-50%);
+}
+.marker.amount-left .marker-amount,
+.marker.amount-left .marker-label {
+  left: auto; right: calc(100% + 6px); top: 50%; bottom: auto; transform: translateY(-50%);
+}
+.marker.amount-bottom-left .marker-amount,
+.marker.amount-bottom-left .marker-label {
+  left: 50%; right: auto; top: calc(100% + 6px); bottom: auto; transform: translateX(-100%);
+}
+.marker.amount-bottom-right .marker-amount,
+.marker.amount-bottom-right .marker-label {
+  left: 50%; right: auto; top: calc(100% + 6px); bottom: auto; transform: none;
+}
+.marker.amount-top-left .marker-amount,
+.marker.amount-top-left .marker-label {
+  left: 50%; right: auto; top: auto; bottom: calc(100% + 6px); transform: translateX(-100%);
+}
+.marker.amount-top-right .marker-amount,
+.marker.amount-top-right .marker-label {
+  left: 50%; right: auto; top: auto; bottom: calc(100% + 6px); transform: none;
+}
+@media (max-width: 640px) {
+  .map-stage { --marker-size: 40px; }
+  .marker-amount, .marker-label { font-size: 10px; padding: 3px 5px; }
+}
+
+
+/* --------------------------------------------------------------------------
+ * 地点入力ヘッダー
+ * --------------------------------------------------------------------------
+ * 「金庫室」のように文字数が多い階層名でも、バッジ内で改行しない。
+ * 地点名側だけが必要に応じて折り返し、階層バッジの幅は保持する。
+ */
+.spot-title > strong {
+  min-width: 0;
+  flex: 1 1 auto;
+  overflow-wrap: anywhere;
+}
+
+#spotFloor {
+  flex: 0 0 auto;
+  min-width: max-content;
+  white-space: nowrap;
+  word-break: keep-all;
+  text-align: center;
+  line-height: 1.2;
+}
