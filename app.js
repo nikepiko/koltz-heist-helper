@@ -219,7 +219,7 @@ function toggleQuickMark(id) {
 
   // ユーザーが価格を明示選択した地点だけは、誤操作防止のためダブルクリックで消さない。
   if (data.priceExplicit) {
-    toast('価格を選択済みの地点は、チェック欄か「この地点を消去」で解除できます');
+    toast('価格を選択済みの地点は「この地点を消去」で解除できます');
     return;
   }
 
@@ -577,6 +577,26 @@ function applyMarkerCollisionLayout() {
     }
   }
 
+  // 元の地図上で完全に同じ横一列に並ぶ地点は、衝突回避後も左右順を維持する。
+  // 狭い画面では反発計算が収束する途中で隣接マーカーが交差し、
+  // B1 の No.27 / No.26 などが左右反転して見えることがあるため。
+  const sameRowTolerance = 0.5;
+  const rowGroups = [];
+  for (const node of nodes) {
+    let group = rowGroups.find(items => Math.abs(items[0].baseY - node.baseY) <= sameRowTolerance);
+    if (!group) {
+      group = [];
+      rowGroups.push(group);
+    }
+    group.push(node);
+  }
+  for (const group of rowGroups) {
+    if (group.length < 2) continue;
+    const originalOrder = [...group].sort((a, b) => a.baseX - b.baseX || a.index - b.index);
+    const resolvedXs = group.map(node => node.x).sort((a, b) => a - b);
+    originalOrder.forEach((node, index) => { node.x = resolvedXs[index]; });
+  }
+
   nodes.forEach(node => {
     node.button.style.setProperty('--marker-offset-x', `${Math.round(node.x - node.baseX)}px`);
     node.button.style.setProperty('--marker-offset-y', `${Math.round(node.y - node.baseY)}px`);
@@ -775,9 +795,7 @@ function renderEditor() {
   const def = SPOT_DEFS[id], data = getSpot(id);
   el('spotName').textContent = def.name;
   el('spotFloor').textContent = def.floor;
-  el('targetExists').checked = data.exists;
   el('targetBonus').checked = def.isMain ? false : data.bonus;
-  el('targetExistsField').classList.toggle('hidden', def.isMain);
   el('bonusField').classList.toggle('hidden', def.isMain);
   el('mainTargetFields').classList.toggle('hidden', !def.isMain);
 
@@ -1044,19 +1062,6 @@ function bind() {
     state.selectedSpot = null;
     persist();
     renderAll();
-  });
-  el('targetExists').addEventListener('change', e => {
-    const data = getSpot(state.selectedSpot);
-    const def = SPOT_DEFS[state.selectedSpot];
-    const firstItem = !def.isMain && e.target.checked && !data.itemId ? (SPOT_LOOT_OPTIONS[def.id] || [])[0] : data.itemId;
-    const item = firstItem ? LOOT_CATALOG[firstItem] : null;
-    setSpot(state.selectedSpot, {
-      exists: e.target.checked,
-      bonus: e.target.checked ? data.bonus : false,
-      itemId: firstItem || '',
-      value: e.target.checked && item && !data.value ? String(defaultPrice(item)) : data.value,
-      priceExplicit: e.target.checked ? data.priceExplicit : false
-    });
   });
   el('lootItem').addEventListener('change', e => {
     const id = state.selectedSpot;
